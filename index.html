@@ -308,6 +308,43 @@ h1 {
     return /^https?:\/\//i.test(s) ? s : "";
   }
 
+  // ---------- 分享連結（把結果編進網址，收到連結的人才看得到同一個結果） ----------
+
+  function clampPct(n) {
+    return Math.max(0, Math.min(100, Math.round(n)));
+  }
+
+  function buildResultQuery(area, act, sp) {
+    var p = new URLSearchParams();
+    p.set("a", area);
+    p.set("r", act.region);
+    p.set("k", sp.know);
+    p.set("d", sp.depth);
+    return "?" + p.toString();
+  }
+
+  function parseResultFromUrl() {
+    var p;
+    try { p = new URLSearchParams(location.search); } catch (e) { return null; }
+    var area = p.get("a"), region = p.get("r");
+    var know = Number(p.get("k")), depth = Number(p.get("d"));
+    if (!area || !region || !isFinite(know) || !isFinite(depth)) return null;
+
+    var acts = (DATA.activities || {})[area];
+    if (!acts) return null;
+    var act = null;
+    for (var i = 0; i < acts.length; i++) {
+      if (acts[i].region === region) { act = acts[i]; break; }
+    }
+    if (!act) return null;
+
+    return {
+      activity: act,
+      spectra: { know: clampPct(know), depth: clampPct(depth) },
+      resources: (DATA.resources[act.region] || []).slice(0, 3)
+    };
+  }
+
   function render() {
     if (state.phase === "intro") return renderIntro();
     if (state.phase === "result") return renderResult();
@@ -414,12 +451,16 @@ h1 {
 
   function finish() {
     var act = resolveActivity(state.area);
+    var sp = resolveSpectra();
     state.result = {
       activity: act,
-      spectra: resolveSpectra(),
+      spectra: sp,
       resources: (DATA.resources[act.region] || []).slice(0, 3)
     };
     state.phase = "result";
+    try {
+      history.replaceState(null, "", location.pathname + buildResultQuery(state.area, act, sp));
+    } catch (e) { /* 忽略 */ }
     render();
   }
 
@@ -499,7 +540,7 @@ h1 {
 
   function shareResult() {
     var url;
-    try { url = location.href.split("?")[0]; } catch (e) { url = ""; }
+    try { url = location.href; } catch (e) { url = ""; }
     var note = document.getElementById("shareNote");
     var act = state.result ? state.result.activity : null;
     var title = act ? act.short + "．" + act.theme : "綠色旅遊測驗";
@@ -537,6 +578,11 @@ h1 {
       "請在專案根目錄執行 <code>python tools/xlsx_to_js.py</code> 重新產生題目資料，再重新整理這個頁面。</div>";
   } else {
     resetState();
+    var shared = parseResultFromUrl();
+    if (shared) {
+      state.phase = "result";
+      state.result = shared;
+    }
     render();
   }
 })();

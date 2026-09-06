@@ -189,6 +189,7 @@ h1 {
   font-size: 11.5px; box-sizing: border-box; background: var(--surface-sunk); color: var(--ink);
 }
 .footer-credit { text-align: center; font-size: 11px; color: var(--ink-muted); margin-top: 30px; line-height: 1.6; }
+.disclaimer { text-align: center; font-size: 10.5px; color: var(--ink-muted); margin-top: 14px; line-height: 1.8; }
 .error-box {
   border: 1px solid rgba(185,112,47,0.4); background: var(--amber-tint);
   border-radius: 14px; padding: 16px 18px; font-size: 14px; line-height: 1.7;
@@ -358,7 +359,11 @@ h1 {
     try {
       var uid = localStorage.getItem(UID_KEY);
       if (!uid) {
-        uid = crypto.randomUUID?.() ?? (Math.random().toString(36).slice(2) + Date.now().toString(36));
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+          uid = crypto.randomUUID();
+        } else {
+          uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        }
         localStorage.setItem(UID_KEY, uid);
       }
       return uid;
@@ -569,7 +574,8 @@ h1 {
         '<button class="btn primary" id="shareBtn">📤 分享結果</button>' +
       "</div>" +
       '<div class="share-note" id="shareNote"></div>' +
-      footerHtml();
+      footerHtml() +
+      '<p class="disclaimer">本測驗推薦的行動與資源為 2026 年 9 月查證，實際梯次、開放時間與費用可能異動，出發前請以主辦單位公告為準。</p>';
 
     document.getElementById("restartBtn").addEventListener("click", restartQuiz);
     document.getElementById("shareBtn").addEventListener("click", shareResult);

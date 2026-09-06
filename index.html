@@ -207,6 +207,9 @@ h1 {
 (function () {
   "use strict";
 
+  // Apps Script 部署後的網址；留空則完全不送出任何記錄
+  var TRACK_ENDPOINT = "https://script.google.com/macros/s/AKfycbxWuWXtUPvDaTTXq7dYP9V232OpgKz_USdulfSOtKeDQFuGoo9H-B51rTVmGeT-Lw6B/exec";
+
   var DATA = window.QUIZ_DATA;
   var app = document.getElementById("app");
 
@@ -220,7 +223,8 @@ h1 {
       step1: [],        // 每題選到的地區類型
       step2: [],        // 每題選到的 { key, know, depth }
       area: null,       // Step 1 算出來的地區類型（不會顯示給使用者）
-      result: null
+      result: null,
+      finishTracked: false // 這次作答的「完成」事件是否已經送過，避免重複記錄
     };
   }
 
@@ -345,6 +349,61 @@ h1 {
     };
   }
 
+  // ---------- 匿名使用記錄（只送「載入／開始／完成」三種事件，端點留空就整段跳過） ----------
+
+  var UID_KEY = "gtq_uid";
+  var ATTEMPTS_KEY = "gtq_attempts";
+
+  function getUid() {
+    try {
+      var uid = localStorage.getItem(UID_KEY);
+      if (!uid) {
+        uid = crypto.randomUUID?.() ?? (Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem(UID_KEY, uid);
+      }
+      return uid;
+    } catch (e) { return ""; }
+  }
+
+  function getAttempts() {
+    try {
+      var n = parseInt(localStorage.getItem(ATTEMPTS_KEY), 10);
+      return isNaN(n) ? 0 : n;
+    } catch (e) { return 0; }
+  }
+
+  function bumpAttempts() {
+    try { localStorage.setItem(ATTEMPTS_KEY, String(getAttempts() + 1)); } catch (e) { /* 忽略 */ }
+  }
+
+  function isTestMode() {
+    try { return new URLSearchParams(location.search).get("test") === "1"; } catch (e) { return false; }
+  }
+
+  // extra 只有「完成」事件會帶：{ area, activity, know, depth }
+  function track(eventName, extra) {
+    if (!TRACK_ENDPOINT) return;
+    try {
+      var payload = {
+        event: eventName,
+        uid: getUid(),
+        attempt: getAttempts(),
+        area: (extra && extra.area) || "",
+        activity: (extra && extra.activity) || "",
+        know: (extra && extra.know != null) ? extra.know : "",
+        depth: (extra && extra.depth != null) ? extra.depth : "",
+        source: isTestMode() ? "測試" : "正式"
+      };
+      fetch(TRACK_ENDPOINT, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(function () { /* 忽略：離線或端點掛掉都不影響使用者 */ });
+    } catch (e) { /* 忽略：記錄絕不能擋住畫面 */ }
+  }
+
   function render() {
     if (state.phase === "intro") return renderIntro();
     if (state.phase === "result") return renderResult();
@@ -363,6 +422,7 @@ h1 {
       '<p class="intro-meta">約 8 題・2 分鐘</p>' +
       footerHtml();
     document.getElementById("startBtn").addEventListener("click", function () {
+      track("開始");
       state.phase = "step1";
       state.index = 0;
       render();
@@ -458,6 +518,11 @@ h1 {
       resources: (DATA.resources[act.region] || []).slice(0, 3)
     };
     state.phase = "result";
+    if (!state.finishTracked) {
+      state.finishTracked = true;
+      track("完成", { area: state.area, activity: act.region, know: sp.know, depth: sp.depth });
+      bumpAttempts();
+    }
     try {
       history.replaceState(null, "", location.pathname + buildResultQuery(state.area, act, sp));
     } catch (e) { /* 忽略 */ }
@@ -578,6 +643,7 @@ h1 {
       "請在專案根目錄執行 <code>python tools/xlsx_to_js.py</code> 重新產生題目資料，再重新整理這個頁面。</div>";
   } else {
     resetState();
+    track("載入");
     var shared = parseResultFromUrl();
     if (shared) {
       state.phase = "result";

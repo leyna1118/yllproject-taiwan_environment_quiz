@@ -17,6 +17,7 @@ index.html               測驗本體（流程、計分、結果頁）
 data/quiz-data.js        題目與資源資料（由 data.xlsx 自動產生，不要手改）
 data.xlsx                內容的唯一真實來源，要改題目或資源請改這裡
 tools/xlsx_to_js.py      轉檔腳本：data.xlsx → data/quiz-data.js
+tools/apps-script.gs     匿名使用記錄的後端，部署到 Google Apps Script
 result_page_example.html 結果頁的靜態範例（給設計討論用，不是產品的一部分）
 legacy/                  v1 舊版測驗（護島人測驗），已停用，留著備查
 ```
@@ -88,5 +89,16 @@ Step 2：該地區類型的 4 題
 
 ---
 
-## 待辦
-- [ ] 蒐集使用者回饋，看題目敘述是否夠好懂
+## 匿名使用記錄
+
+`index.html` 會送三個事件（載入／開始／完成）到一個 Google Apps Script 端點，用來看有多少人測、測到哪裡放棄、結果分佈長怎樣。
+
+**啟用方式**：照 `tools/apps-script.gs` 檔案開頭的步驟部署成 Web app，把網址貼進 `index.html` 最上方的 `TRACK_ENDPOINT`。**留空就完全不會送出任何記錄**，本機開發或還沒部署時不用擔心。
+
+**只記錄這些，不含任何個資**：
+- 一組存在瀏覽器 `localStorage` 的匿名亂數 ID（換裝置、清瀏覽器資料就會變成新 ID）
+- 這個 ID 累計作答過幾次
+- 完成測驗時的地區類型、主線任務、兩條光譜分數（0–100）
+- 網址帶 `?test=1` 時會標記成「測試」來源，方便自己測試時跟真實數據分開看
+
+不蒐集 IP、不放 cookie、不做瀏覽器指紋、沒有任何第三方分析套件。就算端點沒填、被瀏覽器擋掉、或使用者是無痕模式導致 `localStorage` 不能用，測驗畫面都會照常運作，不會出現任何錯誤。

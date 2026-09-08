@@ -418,13 +418,12 @@ h1 {
   function renderIntro() {
     app.innerHTML =
       '<p class="eyebrow">綠色旅遊測驗</p>' +
-      '<h1>下一趟旅行，<br>你可以順手做一件事</h1>' +
+      '<h1>當個善待土地的旅人，<br>其實不需要帶著沉重的使命感。</h1>' +
       '<div class="intro-lede">' +
-        '<p>很多人有環保的心，但旅遊時不知道當地有什麼可以參與的資源。</p>' +
-        '<p>八個問題，帶你找到一個真實存在、現在就報得到名的在地綠色行動——還有你自己的旅人性格。</p>' +
+        '<p>8 題測出你的隱藏旅人性格，替你挑一個頻率相投的永續提案，收拾好就出發。</p>' +
       '</div>' +
       '<button class="btn primary wide" id="startBtn">開始測驗</button>' +
-      '<p class="intro-meta">約 8 題・2 分鐘</p>' +
+      '<p class="intro-meta">8 題・2 分鐘</p>' +
       footerHtml();
     document.getElementById("startBtn").addEventListener("click", function () {
       track("開始");

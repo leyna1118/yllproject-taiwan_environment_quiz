@@ -66,7 +66,7 @@ def norm(v):
     """儲存格 → 去頭尾空白的字串；空值回傳空字串。"""
     if v is None:
         return ""
-    return unicodedata.normalize("NFKC", str(v)).strip()
+    return unicodedata.normalize("NFC", str(v)).strip()
 
 
 def num(v):

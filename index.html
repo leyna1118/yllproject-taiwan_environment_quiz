@@ -173,6 +173,37 @@ h1 {
 .resource-place { font-size: 11.5px; color: var(--ink-muted); margin-top: 3px; }
 .resource-desc { font-size: 12.5px; color: var(--ink-secondary); margin-top: 5px; line-height: 1.6; }
 
+.feedback-block { margin-top: 34px; }
+.feedback-question { font-size: 15px; font-weight: 700; margin: 0 0 14px; }
+.rate-options { display: flex; gap: 10px; }
+.rate-option {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font: inherit; background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 14px 8px; cursor: pointer;
+  transition: border-color .15s, background .15s, opacity .15s;
+}
+.rate-option:hover { border-color: var(--brand); background: var(--brand-tint); }
+.rate-option:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.rate-option:disabled { cursor: default; }
+.rate-emoji { font-size: 26px; line-height: 1; }
+.rate-label { font-size: 11.5px; color: var(--ink-secondary); font-weight: 700; }
+.rate-option.selected { border-color: var(--brand); background: var(--brand-tint-2); }
+.rate-option.dimmed { opacity: .45; }
+
+.feedback-text { margin-top: 22px; }
+.feedback-text-title { font-size: 14.5px; font-weight: 700; margin: 0 0 6px; }
+.feedback-text-desc { font-size: 12.5px; color: var(--ink-secondary); margin: 0 0 12px; line-height: 1.6; }
+.feedback-text textarea {
+  display: block; width: 100%; resize: none; overflow: hidden; font: inherit; font-size: 14px;
+  color: var(--ink); background: var(--surface-sunk); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; line-height: 1.6; box-sizing: border-box;
+}
+.feedback-text textarea:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.feedback-submit-btn { margin-top: 12px; width: 100%; }
+.feedback-submit-btn:disabled { opacity: .5; cursor: default; }
+.feedback-note { font-size: 11px; color: var(--ink-muted); margin-top: 8px; text-align: center; }
+.feedback-done { font-size: 14.5px; font-weight: 700; color: var(--brand-deep); text-align: center; padding: 10px 0; }
+
 .actions { display: flex; gap: 10px; margin-top: 36px; }
 .btn {
   flex: 1; text-align: center; font: inherit; font-size: 14.5px; font-weight: 700;
@@ -209,7 +240,7 @@ h1 {
   "use strict";
 
   // Apps Script 部署後的網址；留空則完全不送出任何記錄
-  var TRACK_ENDPOINT = "https://script.google.com/macros/s/AKfycbxWuWXtUPvDaTTXq7dYP9V232OpgKz_USdulfSOtKeDQFuGoo9H-B51rTVmGeT-Lw6B/exec";
+  var TRACK_ENDPOINT = "https://script.google.com/macros/s/AKfycbweRK4yznm8nJD3JZP_EfR3q7rqSGcy4TeX9RTqYt6nnWUVyKxAwUsIE2_e6KKrEKKS/exec";
 
   var DATA = window.QUIZ_DATA;
   var app = document.getElementById("app");
@@ -386,19 +417,33 @@ h1 {
   }
 
   // extra 只有「完成」事件會帶：{ area, activity, know, depth }
+  // 「評分」事件會帶：{ area, activity, rating }；「回饋」事件會帶：{ area, activity, text }
   function track(eventName, extra) {
     if (!TRACK_ENDPOINT) return;
     try {
-      var payload = {
-        event: eventName,
-        uid: getUid(),
-        attempt: getAttempts(),
-        area: (extra && extra.area) || "",
-        activity: (extra && extra.activity) || "",
-        know: (extra && extra.know != null) ? extra.know : "",
-        depth: (extra && extra.depth != null) ? extra.depth : "",
-        source: isTestMode() ? "測試" : "正式"
-      };
+      var payload;
+      if (eventName === "評分" || eventName === "回饋") {
+        payload = {
+          event: eventName,
+          uid: getUid(),
+          area: (extra && extra.area) || "",
+          activity: (extra && extra.activity) || "",
+          rating: (extra && extra.rating != null) ? extra.rating : "",
+          text: (extra && extra.text) || "",
+          source: isTestMode() ? "測試" : "正式"
+        };
+      } else {
+        payload = {
+          event: eventName,
+          uid: getUid(),
+          attempt: getAttempts(),
+          area: (extra && extra.area) || "",
+          activity: (extra && extra.activity) || "",
+          know: (extra && extra.know != null) ? extra.know : "",
+          depth: (extra && extra.depth != null) ? extra.depth : "",
+          source: isTestMode() ? "測試" : "正式"
+        };
+      }
       fetch(TRACK_ENDPOINT, {
         method: "POST",
         mode: "no-cors",
@@ -533,6 +578,95 @@ h1 {
     render();
   }
 
+  // 分享連結進來的結果沒有 state.area，這裡從主線任務反查地區類型，方便評分／回饋記錄用
+  function areaForActivity(act) {
+    if (state.area) return state.area;
+    for (var i = 0; i < DATA.areas.length; i++) {
+      var a = DATA.areas[i];
+      var acts = DATA.activities[a] || [];
+      for (var j = 0; j < acts.length; j++) {
+        if (acts[j].region === act.region) return a;
+      }
+    }
+    return "";
+  }
+
+  var RATE_OPTIONS = [
+    { rating: 1, emoji: "😐", label: "應該不會" },
+    { rating: 2, emoji: "🙂", label: "有機會" },
+    { rating: 3, emoji: "🤩", label: "很想去" }
+  ];
+
+  function feedbackBlockHtml() {
+    if (!TRACK_ENDPOINT) return "";
+    var rateOptionsHtml = RATE_OPTIONS.map(function (o) {
+      return '<button class="rate-option" type="button" data-rating="' + o.rating + '">' +
+        '<span class="rate-emoji">' + o.emoji + '</span>' +
+        '<span class="rate-label">' + esc(o.label) + '</span></button>';
+    }).join("");
+
+    return '<div class="feedback-block" id="feedbackBlock">' +
+      '<p class="section-label">給我們一點回饋</p>' +
+      '<div class="feedback-rate">' +
+        '<p class="feedback-question">這個提案，你會想試試看嗎？</p>' +
+        '<div class="rate-options" id="rateOptions">' + rateOptionsHtml + '</div>' +
+      '</div>' +
+      '<div class="feedback-text" id="feedbackTextBlock" hidden>' +
+        '<p class="feedback-text-title">可以和我們說說你的想法嗎？</p>' +
+        '<p class="feedback-text-desc">哪一題讓你猶豫、為什麼推薦的任務你想去／不想去，都可以直接跟我們說！</p>' +
+        '<textarea id="feedbackInput" rows="2" maxlength="500" placeholder="例如：第三題兩個選項我都想選"></textarea>' +
+        '<button class="btn primary feedback-submit-btn" type="button" id="feedbackSubmitBtn" disabled>送出想法</button>' +
+        '<p class="feedback-note">請不要填寫個人資料</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function bindFeedbackBlock(area, activity) {
+    var block = document.getElementById("feedbackBlock");
+    if (!block) return;
+
+    var rated = false;
+    var sent = false;
+    var rateOptions = Array.prototype.slice.call(block.querySelectorAll(".rate-option"));
+    var textBlock = document.getElementById("feedbackTextBlock");
+    var textarea = document.getElementById("feedbackInput");
+    var submitBtn = document.getElementById("feedbackSubmitBtn");
+
+    rateOptions.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (rated) return;
+        rated = true;
+        var rating = Number(btn.getAttribute("data-rating"));
+        track("評分", { area: area, activity: activity, rating: rating });
+        rateOptions.forEach(function (b) {
+          b.disabled = true;
+          b.classList.toggle("selected", b === btn);
+          b.classList.toggle("dimmed", b !== btn);
+        });
+        textBlock.hidden = false;
+      });
+    });
+
+    function resizeTextarea() {
+      textarea.style.height = "auto";
+      textarea.style.height = textarea.scrollHeight + "px";
+    }
+
+    textarea.addEventListener("input", function () {
+      resizeTextarea();
+      submitBtn.disabled = textarea.value.trim().length === 0;
+    });
+
+    submitBtn.addEventListener("click", function () {
+      if (sent) return;
+      var text = textarea.value.trim();
+      if (!text) return;
+      sent = true;
+      track("回饋", { area: area, activity: activity, text: text });
+      textBlock.innerHTML = '<p class="feedback-done">收到了，謝謝 🙌</p>';
+    });
+  }
+
   function renderResult() {
     var act = state.result.activity;
     var sp = state.result.spectra;
@@ -568,6 +702,8 @@ h1 {
 
       (resourcesHtml ? '<p class="section-label">延伸資源</p>' + resourcesHtml : "") +
 
+      feedbackBlockHtml() +
+
       '<div class="actions">' +
         '<button class="btn" id="restartBtn">🔄 重新測驗</button>' +
         '<button class="btn primary" id="shareBtn">📤 分享結果</button>' +
@@ -578,6 +714,7 @@ h1 {
 
     document.getElementById("restartBtn").addEventListener("click", restartQuiz);
     document.getElementById("shareBtn").addEventListener("click", shareResult);
+    bindFeedbackBlock(areaForActivity(act), act.region);
   }
 
   // 把 0~100 的分數壓縮到 8~92%，這樣就算選滿 +4/-4，圓點也不會貼在軌道最邊緣

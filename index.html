@@ -82,6 +82,7 @@ body {
 .blob-1 { width: 240px; height: 240px; background: var(--brand-tint); top: -90px; left: -90px; }
 .blob-2 { width: 150px; height: 150px; background: var(--brand-tint-2); top: 140px; right: -70px; opacity: .8; }
 .content { position: relative; z-index: 1; padding: 40px 26px 48px; }
+#app.fading { opacity: 0; pointer-events: none; }
 
 .eyebrow {
   text-align: center; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase;
@@ -519,11 +520,29 @@ h1 {
     });
   }
 
-  function render() {
+  // 題目跟題目之間切換用短一點的淡入淡出；跨越「首頁／中繼頁」這種大轉場則用長一點的
+  var FADE_SHORT_MS = 140;
+  var FADE_LONG_MS = 320;
+
+  function paint() {
     if (state.phase === "intro") return renderIntro();
     if (state.phase === "transition") return renderTransition();
     if (state.phase === "result") return renderResult();
     return renderQuestion();
+  }
+
+  // long 為 true 時用比較長的淡入淡出（首頁↔題目、題目↔中繼頁）；
+  // 第一次畫面（app 還沒有內容）不需要淡出，直接畫
+  function render(long) {
+    if (!app.firstChild) { paint(); return; }
+    var duration = long ? FADE_LONG_MS : FADE_SHORT_MS;
+    app.style.transition = "opacity " + duration + "ms ease";
+    app.classList.add("fading");
+    setTimeout(function () {
+      paint();
+      void app.offsetWidth; // 強制 reflow，讓移除 class 後的淡入 transition 生效
+      app.classList.remove("fading");
+    }, duration);
   }
 
   function renderIntro() {
@@ -540,14 +559,14 @@ h1 {
       track("開始");
       state.phase = "step1";
       state.index = 0;
-      render();
+      render(true);
     });
   }
 
   // Step 1 跟 Step 2 之間的中繼頁，每個地區類型各一份文案
   function renderTransition() {
     var t = (DATA.transitions || {})[state.area];
-    if (!t) { state.phase = "step2"; state.index = 0; render(); return; }
+    if (!t) { state.phase = "step2"; state.index = 0; render(true); return; }
 
     app.innerHTML =
       '<p class="eyebrow">綠色旅遊測驗</p>' +
@@ -562,7 +581,7 @@ h1 {
     onTap(document.getElementById("continueBtn"), function () {
       state.phase = "step2";
       state.index = 0;
-      render();
+      render(true);
     });
     onTap(document.getElementById("backBtn"), goBack);
   }
@@ -619,6 +638,7 @@ h1 {
   }
 
   function answer(opt) {
+    var longFade = false;
     if (state.phase === "step1") {
       state.step1[state.index] = opt.area;
       state.index++;
@@ -627,6 +647,7 @@ h1 {
         state.area = resolveArea();
         state.phase = "transition";
         state.step2 = [];
+        longFade = true;
       }
     } else {
       state.step2[state.index] = { key: opt.key, know: opt.know, depth: opt.depth };
@@ -636,21 +657,24 @@ h1 {
         return;
       }
     }
-    render();
+    render(longFade);
   }
 
   function goBack() {
+    var longFade = false;
     if (state.phase === "step2" && state.index === 0) {
       state.phase = "transition";
+      longFade = true;
     } else if (state.phase === "transition") {
       state.phase = "step1";
       state.index = DATA.step1.length - 1;
       state.area = null;
       state.step2 = [];
+      longFade = true;
     } else if (state.index > 0) {
       state.index--;
     }
-    render();
+    render(longFade);
   }
 
   function finish() {
@@ -671,7 +695,7 @@ h1 {
     try {
       history.replaceState(null, "", location.pathname + buildResultQuery(state.area, act, sp));
     } catch (e) { /* 忽略 */ }
-    render();
+    render(true);
   }
 
   // 分享連結進來的結果沒有 state.area，這裡從主線任務反查地區類型，方便評分／回饋記錄用
@@ -842,7 +866,7 @@ h1 {
   function restartQuiz() {
     try { history.replaceState(null, "", location.pathname); } catch (e) { /* 忽略 */ }
     resetState();
-    render();
+    render(true);
     try { window.scrollTo(0, 0); } catch (e) { /* 忽略 */ }
   }
 

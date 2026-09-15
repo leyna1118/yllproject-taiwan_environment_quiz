@@ -26,17 +26,6 @@ var FEEDBACK_EVENTS = ["評分", "回饋"];
 var VALID_SOURCES = ["正式", "測試"];
 var VALID_AREAS = ["海邊", "城市", "鄉間", "山林"];
 
-// 16 個主線任務行政區，從 data/quiz-data.js 的 activities 底下每個地區類型
-// 各 4 筆的 region 欄位抓出來的固定清單。
-// 之後如果在 data.xlsx 改了主線任務（新增/改名/刪除），這份清單要跟著手動更新，
-// 不然新的主線任務送出的「完成」事件會被白名單擋掉、不會被記錄。
-var VALID_ACTIVITIES = [
-  "小琉球", "蘭嶼", "金門金城（建功嶼）", "花蓮縣新城鄉",
-  "台北‧大稻埕", "台南‧山上花園水道博物館", "高雄‧哈瑪星", "台中‧富興工廠1962文創聚落",
-  "苗栗淺山（通霄／苑裡等）", "花蓮富里羅山村", "池上鄉萬安社區（台東）", "屏東恆春社頂",
-  "新竹北埔鹿寮坑", "貓空（台北文山區）", "南投集集", "阿里山（嘉義）"
-];
-
 function doPost(e) {
   try {
     var raw = e && e.postData && e.postData.contents;
@@ -106,7 +95,7 @@ function isValidPayload_(p) {
 
   if (!isIntInRange_(p.attempt, 0, 10000)) return false;
   if (p.area !== "" && VALID_AREAS.indexOf(p.area) === -1) return false;
-  if (p.activity !== "" && VALID_ACTIVITIES.indexOf(p.activity) === -1) return false;
+  if (typeof p.activity !== "string" || p.activity.length > 100) return false;
   if (p.know !== "" && !isIntInRange_(p.know, 0, 100)) return false;
   if (p.depth !== "" && !isIntInRange_(p.depth, 0, 100)) return false;
 
@@ -120,10 +109,10 @@ function isValidPayload_(p) {
 }
 
 // 「評分」必須 rating 為 1/2/3 且不得帶 text；「回饋」必須有非空、不超過 500 字的
-// text 且不得帶 rating；兩者的 area、activity 都必須是既有白名單值（不能是空字串）。
+// text 且不得帶 rating；area 必須是既有白名單值，activity 不能是空字串。
 function isValidFeedbackPayload_(p) {
   if (VALID_AREAS.indexOf(p.area) === -1) return false;
-  if (VALID_ACTIVITIES.indexOf(p.activity) === -1) return false;
+  if (typeof p.activity !== "string" || p.activity === "" || p.activity.length > 100) return false;
 
   if (p.event === "評分") {
     if (p.rating !== 1 && p.rating !== 2 && p.rating !== 3) return false;

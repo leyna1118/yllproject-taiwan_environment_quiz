@@ -128,6 +128,7 @@ h1 {
 .option:hover { border-color: var(--brand); background: var(--brand-tint); }
 .option:active { transform: scale(0.995); }
 .option:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.option.selected { border-color: var(--brand); background: var(--brand-tint-2); }
 
 .back-link {
   display: block; margin: 22px auto 0; background: none; border: none; font: inherit;
@@ -501,9 +502,15 @@ h1 {
     var done = (state.phase === "step1" ? state.index : DATA.step1.length + state.index);
     var pct = Math.round(done / total * 100);
 
+    // 回上一題時，這一題先前選過的選項要保留成已選取的樣子
+    var prevAnswer = state.phase === "step1" ? state.step1[state.index] : state.step2[state.index];
+
     var opts = shuffled(q.options);
     var optionsHtml = opts.map(function (opt, i) {
-      return '<button class="option" data-i="' + i + '">' + esc(opt.text) + '</button>';
+      var isSelected = state.phase === "step1"
+        ? prevAnswer === opt.area
+        : !!(prevAnswer && prevAnswer.key === opt.key);
+      return '<button class="option' + (isSelected ? ' selected' : '') + '" data-i="' + i + '">' + esc(opt.text) + '</button>';
     }).join("");
 
     app.innerHTML =

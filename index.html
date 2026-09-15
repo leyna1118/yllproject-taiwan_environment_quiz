@@ -130,6 +130,8 @@ h1 {
 .option:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .option.selected { border-color: var(--brand); background: var(--brand-tint-2); }
 
+.option, .btn, .back-link, .rate-option { touch-action: manipulation; }
+
 .back-link {
   display: block; margin: 22px auto 0; background: none; border: none; font: inherit;
   font-size: 13px; color: var(--ink-muted); cursor: pointer; text-decoration: underline;
@@ -455,6 +457,47 @@ h1 {
     } catch (e) { /* 忽略：記錄絕不能擋住畫面 */ }
   }
 
+  // 手機上點擊按鈕後，瀏覽器會在 touchend 之後自動補送一組相容用的滑鼠事件
+  // （mousedown/mouseup/click）。如果 touchend 的點擊處理已經把畫面換成
+  // 下一題（新按鈕剛好出現在同一個位置），這組補送的 click 就會誤觸新按鈕。
+  // 做法：touchend 就直接觸發，並且 preventDefault 擋掉瀏覽器接下來才要
+  // 補送的那個 click，這樣它就不會有機會打在新畫面的按鈕上；滑鼠／鍵盤操作
+  // 沒有 touchend，照樣走原本的 click。用位移距離判斷手指是不是滑走了
+  // （滑動不算點擊，維持原本可以滑動頁面的體驗）。
+  function onTap(el, handler) {
+    if (!el) return;
+    var startX = 0, startY = 0, tracking = false, fired = false;
+
+    function fire(e) {
+      if (fired) return;
+      fired = true;
+      handler(e);
+    }
+
+    el.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) return;
+      tracking = true;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, { passive: true });
+
+    el.addEventListener("touchend", function (e) {
+      if (!tracking) return;
+      tracking = false;
+      var t = e.changedTouches && e.changedTouches[0];
+      if (t) {
+        var dx = t.clientX - startX, dy = t.clientY - startY;
+        if (Math.sqrt(dx * dx + dy * dy) > 10) return; // 手指滑走了，不算點擊
+      }
+      if (e.cancelable) e.preventDefault();
+      fire(e);
+    });
+
+    el.addEventListener("click", function (e) {
+      fire(e);
+    });
+  }
+
   function render() {
     if (state.phase === "intro") return renderIntro();
     if (state.phase === "result") return renderResult();
@@ -471,7 +514,7 @@ h1 {
       '<button class="btn primary wide" id="startBtn">開始測驗</button>' +
       '<p class="intro-meta">8 題・2 分鐘</p>' +
       footerHtml();
-    document.getElementById("startBtn").addEventListener("click", function () {
+    onTap(document.getElementById("startBtn"), function () {
       track("開始");
       state.phase = "step1";
       state.index = 0;
@@ -523,12 +566,11 @@ h1 {
       (done > 0 ? '<button class="back-link" id="backBtn">← 回上一題</button>' : "");
 
     Array.prototype.forEach.call(app.querySelectorAll(".option"), function (btn) {
-      btn.addEventListener("click", function () {
+      onTap(btn, function () {
         answer(opts[Number(btn.getAttribute("data-i"))]);
       });
     });
-    var back = document.getElementById("backBtn");
-    if (back) back.addEventListener("click", goBack);
+    onTap(document.getElementById("backBtn"), goBack);
   }
 
   function answer(opt) {
@@ -640,7 +682,7 @@ h1 {
     var submitBtn = document.getElementById("feedbackSubmitBtn");
 
     rateOptions.forEach(function (btn) {
-      btn.addEventListener("click", function () {
+      onTap(btn, function () {
         if (rated) return;
         rated = true;
         var rating = Number(btn.getAttribute("data-rating"));
@@ -664,7 +706,7 @@ h1 {
       submitBtn.disabled = textarea.value.trim().length === 0;
     });
 
-    submitBtn.addEventListener("click", function () {
+    onTap(submitBtn, function () {
       if (sent) return;
       var text = textarea.value.trim();
       if (!text) return;
@@ -719,8 +761,8 @@ h1 {
       footerHtml() +
       '<p class="disclaimer">本測驗推薦的行動與資源為 2026 年 9 月查證，實際梯次、開放時間與費用可能異動，出發前請以主辦單位公告為準。</p>';
 
-    document.getElementById("restartBtn").addEventListener("click", restartQuiz);
-    document.getElementById("shareBtn").addEventListener("click", shareResult);
+    onTap(document.getElementById("restartBtn"), restartQuiz);
+    onTap(document.getElementById("shareBtn"), shareResult);
     bindFeedbackBlock(areaForActivity(act), act.region);
   }
 

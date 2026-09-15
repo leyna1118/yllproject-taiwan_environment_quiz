@@ -108,6 +108,19 @@ h1 {
   font-size: 12.5px; color: var(--ink-muted); text-align: center; margin: 18px 0 0;
 }
 
+/* ---------- 假 loading ---------- */
+.loading-block {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 22px; padding: 100px 0;
+}
+.spinner {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--brand);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 14px; font-weight: 700; color: var(--ink-secondary); }
+
 /* ---------- 題目 ---------- */
 .progress-wrap { margin-bottom: 26px; }
 .progress-text {
@@ -520,13 +533,14 @@ h1 {
     });
   }
 
-  // 題目跟題目之間切換用短一點的淡入淡出；跨越「首頁／中繼頁」這種大轉場則用長一點的
-  var FADE_SHORT_MS = 140;
-  var FADE_LONG_MS = 320;
+  var FADE_SHORT_MS = 240;
+  var FADE_LONG_MS = 240;
+  var LOADING_MS = 1100; // 結果頁前的假 loading 停留時間
 
   function paint() {
     if (state.phase === "intro") return renderIntro();
     if (state.phase === "transition") return renderTransition();
+    if (state.phase === "loading") return renderLoading();
     if (state.phase === "result") return renderResult();
     return renderQuestion();
   }
@@ -584,6 +598,15 @@ h1 {
       render(true);
     });
     onTap(document.getElementById("backBtn"), goBack);
+  }
+
+  // 最後一題答完到結果頁之間的假 loading，讓「生成報告」感覺有發生一件事
+  function renderLoading() {
+    app.innerHTML =
+      '<div class="loading-block">' +
+        '<div class="spinner" aria-hidden="true"></div>' +
+        '<p class="loading-text">生成你的專屬旅人報告中...</p>' +
+      '</div>';
   }
 
   function shuffled(arr) {
@@ -653,7 +676,9 @@ h1 {
       state.step2[state.index] = { key: opt.key, know: opt.know, depth: opt.depth };
       state.index++;
       if (state.index >= (DATA.step2[state.area] || []).length) {
-        finish();
+        state.phase = "loading";
+        render(true);
+        setTimeout(finish, LOADING_MS);
         return;
       }
     }

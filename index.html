@@ -147,6 +147,10 @@ h1 {
 .task-card .task-link { font-size: 13.5px; font-weight: 700; color: var(--brand-deep); text-decoration: none; }
 .task-card .task-link:hover { text-decoration: underline; }
 
+.personality-block { margin-bottom: 18px; }
+.personality-name { font-size: 17px; font-weight: 800; margin: 0 0 8px; }
+.personality-desc { font-size: 14px; line-height: 1.75; color: var(--ink-secondary); margin: 0; }
+
 .spectrum-block { margin-bottom: 34px; }
 .spectrum-row { margin-bottom: 20px; }
 .spectrum-row:last-child { margin-bottom: 0; }
@@ -253,7 +257,7 @@ h1 {
 
   function resetState() {
     state = {
-      phase: "intro",   // intro | step1 | step2 | result
+      phase: "intro",   // intro | step1 | transition | step2 | result
       index: 0,         // 目前第幾題
       step1: [],        // 每題選到的地區類型
       step2: [],        // 每題選到的 { key, know, depth }
@@ -327,11 +331,26 @@ h1 {
     };
   }
 
-  // 光譜文字（不顯示分數，只講傾向）
+  // 光譜文字（不顯示分數，只講傾向）；分段門檻跟「旅人性格」分頁一致：
+  // 0–40 算偏左端、41–59 算兩邊都有、60–100 算偏右端
   function spectrumWord(pos, leftLabel, rightLabel) {
-    if (pos < 45) return "偏" + leftLabel;
-    if (pos <= 55) return "既是" + leftLabel + "也是" + rightLabel;
+    if (pos <= 40) return "偏" + leftLabel;
+    if (pos <= 59) return "既是" + leftLabel + "也是" + rightLabel;
     return "偏" + rightLabel;
+  }
+
+  // 旅人性格：從知識↔實踐、深度↔廣度兩條光譜的位置查「旅人性格」分頁的文案
+  function personalityBucket(pos, leftKey, rightKey) {
+    if (pos <= 40) return leftKey;
+    if (pos <= 59) return "兩邊都有";
+    return rightKey;
+  }
+
+  function resolvePersonality(sp) {
+    var knowB = personalityBucket(sp.know, "偏知識", "偏實踐");
+    var depthB = personalityBucket(sp.depth, "偏深度", "偏廣度");
+    var byKnow = DATA.personalities && DATA.personalities[knowB];
+    return (byKnow && byKnow[depthB]) || null;
   }
 
   // ---------- 畫面 ----------
@@ -377,9 +396,11 @@ h1 {
     }
     if (!act) return null;
 
+    var spectra = { know: clampPct(know), depth: clampPct(depth) };
     return {
       activity: act,
-      spectra: { know: clampPct(know), depth: clampPct(depth) },
+      spectra: spectra,
+      personality: resolvePersonality(spectra),
       resources: (DATA.resources[act.region] || []).slice(0, 3)
     };
   }
@@ -500,6 +521,7 @@ h1 {
 
   function render() {
     if (state.phase === "intro") return renderIntro();
+    if (state.phase === "transition") return renderTransition();
     if (state.phase === "result") return renderResult();
     return renderQuestion();
   }
@@ -507,9 +529,9 @@ h1 {
   function renderIntro() {
     app.innerHTML =
       '<p class="eyebrow">綠色旅遊測驗</p>' +
-      '<h1>當個善待土地的旅人，<br>其實不需要帶著沉重的使命感。</h1>' +
+      '<h1>' + esc(DATA.intro.title) + '</h1>' +
       '<div class="intro-lede">' +
-        '<p>8 題測出你的隱藏旅人性格，替你挑一個頻率相投的永續提案，收拾好就出發。</p>' +
+        '<p>' + esc(DATA.intro.body) + '</p>' +
       '</div>' +
       '<button class="btn primary wide" id="startBtn">開始測驗</button>' +
       '<p class="intro-meta">8 題・2 分鐘</p>' +
@@ -520,6 +542,29 @@ h1 {
       state.index = 0;
       render();
     });
+  }
+
+  // Step 1 跟 Step 2 之間的中繼頁，每個地區類型各一份文案
+  function renderTransition() {
+    var t = (DATA.transitions || {})[state.area];
+    if (!t) { state.phase = "step2"; state.index = 0; render(); return; }
+
+    app.innerHTML =
+      '<p class="eyebrow">綠色旅遊測驗</p>' +
+      '<h1>' + esc(t.title) + '</h1>' +
+      '<div class="intro-lede">' +
+        '<p>' + esc(t.intro) + '</p>' +
+        '<p>' + esc(t.followup) + '</p>' +
+      '</div>' +
+      '<button class="btn primary wide" id="continueBtn">' + esc(t.button) + '</button>' +
+      '<button class="back-link" id="backBtn">← 回上一題</button>';
+
+    onTap(document.getElementById("continueBtn"), function () {
+      state.phase = "step2";
+      state.index = 0;
+      render();
+    });
+    onTap(document.getElementById("backBtn"), goBack);
   }
 
   function shuffled(arr) {
@@ -578,10 +623,9 @@ h1 {
       state.step1[state.index] = opt.area;
       state.index++;
       if (state.index >= DATA.step1.length) {
-        // 這裡算出地區類型，但不告訴使用者，直接接著問下一批題目
+        // 這裡算出地區類型，但不告訴使用者，先接一個中繼頁再問下一批題目
         state.area = resolveArea();
-        state.phase = "step2";
-        state.index = 0;
+        state.phase = "transition";
         state.step2 = [];
       }
     } else {
@@ -597,6 +641,8 @@ h1 {
 
   function goBack() {
     if (state.phase === "step2" && state.index === 0) {
+      state.phase = "transition";
+    } else if (state.phase === "transition") {
       state.phase = "step1";
       state.index = DATA.step1.length - 1;
       state.area = null;
@@ -613,6 +659,7 @@ h1 {
     state.result = {
       activity: act,
       spectra: sp,
+      personality: resolvePersonality(sp),
       resources: (DATA.resources[act.region] || []).slice(0, 3)
     };
     state.phase = "result";
@@ -744,6 +791,11 @@ h1 {
       "</div>" +
 
       '<p class="section-label">你的旅人性格</p>' +
+      (state.result.personality ?
+        '<div class="personality-block">' +
+          '<p class="personality-name">' + esc(state.result.personality.name) + "</p>" +
+          '<p class="personality-desc">' + esc(state.result.personality.desc) + "</p>" +
+        "</div>" : "") +
       '<div class="spectrum-block">' +
         spectrumHtml("知識派", "實踐派", sp.know) +
         spectrumHtml("深度旅遊派", "廣度旅遊派", sp.depth) +

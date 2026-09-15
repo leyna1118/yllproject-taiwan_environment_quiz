@@ -7,10 +7,14 @@
     python tools/xlsx_to_js.py
 
 需要的分頁與欄位：
-  地區分類題 : 題號 / 情境 / 選項 / 對應地區類型 / 備註（備註寫「平手決勝題」的那題會被當成平手決勝依據）
-  好玩活動題 : 地區 / 題號 / 題目 / 選項 / 對應主線任務（行政區）/ 知識派(-2)↔實踐派(+2) / 深度(-2)↔廣度(+2)
-  好玩活動   : 地區類型 / 行政區 / 環保類別 / 行動／資源名稱 / 一句話說明 / 連結 / 狀態 / 備註 / 選擇（標 V 者才會被採用）
-  延伸資源   : 地區類型 / 行政區 / 環保類別 / 行動／資源名稱 / 一句話說明 / 連結 / 狀態 / 備註（備註裡的「搭配主線任務：XXX」用來對應主線任務）
+  地區分類題   : 題號 / 情境 / 選項 / 對應地區類型 / 備註（備註寫「平手決勝題」的那題會被當成平手決勝依據）
+  新好玩活動題 : 地區 / 題號 / 題目 / 選項 / 對應主線任務（行政區）/ 知識派(-2)↔實踐派(+2) / 深度(-2)↔廣度(+2)
+               （Step 2 題庫，取代舊的「好玩活動題」分頁）
+  好玩活動     : 地區類型 / 行政區 / 環保類別 / 行動／資源名稱 / 一句話說明 / 連結 / 狀態 / 備註 / 選擇（標 V 者才會被採用）
+  延伸資源     : 地區類型 / 行政區 / 環保類別 / 行動／資源名稱 / 一句話說明 / 連結 / 狀態 / 備註（備註裡的「搭配主線任務：XXX」用來對應主線任務）
+  中繼頁       : 地區類型 / 標題 / 情境文案 / 接續說明 / 按鈕文字（Step 1 與 Step 2 之間的過場頁，每個地區類型一列）
+  旅人性格     : 知識↔實踐 / 深度↔廣度 / 性格名稱 / 描述（結果頁用；3×3 共 9 種組合，「給你的建議」欄不採用）
+  首頁文案     : 標題 / 內文（只取第一列資料，換掉首頁的 h1 與開場文案）
 
 轉出來的 data/quiz-data.js 會定義 window.QUIZ_DATA，index.html 直接用 <script> 載入，
 不需要架本機伺服器，雙擊 index.html 就能跑。
@@ -158,10 +162,10 @@ def build():
         if len(activities[area]) != 4:
             problems.append(f"[好玩活動] {area} 有 {len(activities[area])} 個主線任務（應為 4 個）")
 
-    # ---------- Step 2：好玩活動題 ----------
+    # ---------- Step 2：新好玩活動題 ----------
     step2 = {a: [] for a in AREAS}
     cur_area = cur_q = None
-    for row in sheet_rows(wb, "好玩活動題", 7):
+    for row in sheet_rows(wb, "新好玩活動題", 7):
         area, qno, stem, opt, key = (norm(row[i]) for i in range(5))
         know, depth = num(row[5]), num(row[6])
         if area:
@@ -182,7 +186,7 @@ def build():
                 match = act
                 break
         if match is None:
-            problems.append(f"[好玩活動題] {cur_area} {cur_q['id']} 的「{key}」對不到任何主線任務")
+            problems.append(f"[新好玩活動題] {cur_area} {cur_q['id']} 的「{key}」對不到任何主線任務")
         cur_q["options"].append({
             "text": opt,
             "key": match["region"] if match else key,
@@ -193,19 +197,19 @@ def build():
     for area in AREAS:
         qs = step2.get(area, [])
         if len(qs) != 4:
-            problems.append(f"[好玩活動題] {area} 有 {len(qs)} 題（應為 4 題）")
+            problems.append(f"[新好玩活動題] {area} 有 {len(qs)} 題（應為 4 題）")
         for q in qs:
             if len(q["options"]) != 4:
-                problems.append(f"[好玩活動題] {area} {q['id']} 有 {len(q['options'])} 個選項（應為 4 個）")
+                problems.append(f"[新好玩活動題] {area} {q['id']} 有 {len(q['options'])} 個選項（應為 4 個）")
                 continue
             axis = "know" if any(o["know"] for o in q["options"]) else "depth"
             vals = sorted(o[axis] for o in q["options"])
             if vals != [-2, -1, 1, 2]:
                 problems.append(
-                    f"[好玩活動題] {area} {q['id']} 的分數分佈是 {vals}（每題四個選項應該是 +2/+1/-1/-2 各一個）")
+                    f"[新好玩活動題] {area} {q['id']} 的分數分佈是 {vals}（每題四個選項應該是 +2/+1/-1/-2 各一個）")
             other = "depth" if axis == "know" else "know"
             if any(o[other] for o in q["options"]):
-                problems.append(f"[好玩活動題] {area} {q['id']} 同一題同時給了兩個維度的分數")
+                problems.append(f"[新好玩活動題] {area} {q['id']} 同一題同時給了兩個維度的分數")
 
     # ---------- 延伸資源 ----------
     resources = {}
@@ -238,12 +242,57 @@ def build():
             if n == 0:
                 problems.append(f"[延伸資源] {act['region']}（{act['name']}）沒有任何延伸資源")
 
+    # ---------- 中繼頁（Step 1 與 Step 2 之間的過場頁，每個地區類型一列） ----------
+    transitions = {}
+    for row in sheet_rows(wb, "中繼頁", 5):
+        area, title, intro, followup, button = (norm(row[i]) for i in range(5))
+        if area not in AREAS:
+            problems.append(f"[中繼頁]「{area}」不在四種地區類型裡")
+            continue
+        transitions[area] = {
+            "title": title,
+            "intro": intro,
+            "followup": followup,
+            "button": button,
+        }
+    for area in AREAS:
+        if area not in transitions:
+            problems.append(f"[中繼頁] 缺少「{area}」的中繼頁文案")
+
+    # ---------- 旅人性格（結果頁用，知識↔實踐／深度↔廣度 3×3 共 9 種組合） ----------
+    PERSONALITY_AXIS1 = ["偏知識", "兩邊都有", "偏實踐"]
+    PERSONALITY_AXIS2 = ["偏深度", "兩邊都有", "偏廣度"]
+    personalities = {}
+    for row in sheet_rows(wb, "旅人性格", 4):
+        know_b, depth_b, name, desc = (norm(row[i]) for i in range(4))
+        if know_b not in PERSONALITY_AXIS1 or depth_b not in PERSONALITY_AXIS2:
+            continue  # 跳過分段門檻說明那幾列
+        personalities.setdefault(know_b, {})[depth_b] = {"name": name, "desc": desc}
+    for k in PERSONALITY_AXIS1:
+        for d in PERSONALITY_AXIS2:
+            if d not in personalities.get(k, {}):
+                problems.append(f"[旅人性格] 缺少「{k}×{d}」的性格文案")
+
+    # ---------- 首頁文案（只取第一列資料） ----------
+    intro_rows = sheet_rows(wb, "首頁文案", 2)
+    if not intro_rows:
+        problems.append("[首頁文案] 沒有內容")
+        intro = {"title": "", "body": ""}
+    else:
+        title, body = norm(intro_rows[0][0]), norm(intro_rows[0][1])
+        if not title or not body:
+            problems.append("[首頁文案] 標題或內文是空的")
+        intro = {"title": title, "body": body}
+
     data = {
         "areas": AREAS,
         "step1": step1,
         "step2": step2,
         "activities": activities,
         "resources": resources,
+        "transitions": transitions,
+        "personalities": personalities,
+        "intro": intro,
     }
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -259,7 +308,10 @@ def build():
     for area in AREAS:
         print(f"  {area}：{len(step2.get(area, []))} 題、"
               f"{len(activities[area])} 個主線任務、"
-              f"{sum(len(resources.get(a['region'], [])) for a in activities[area])} 筆延伸資源")
+              f"{sum(len(resources.get(a['region'], [])) for a in activities[area])} 筆延伸資源、"
+              f"{'有' if area in transitions else '缺'}中繼頁文案")
+    print(f"  旅人性格 {sum(len(v) for v in personalities.values())} / 9 種組合")
+    print(f"  首頁文案：{'有' if intro['title'] else '缺'}")
 
     if problems:
         print("\n⚠ 資料有以下問題，請回 data.xlsx 修正：")

@@ -49,6 +49,7 @@ THEME_TITLES = {
     "永續城鄉與綠色生活": "慢城漫遊之旅",
     "動物保護與野生動物救援": "守護動物之旅",
     "環境教育與公民行動": "公民行動之旅",
+    "食魚教育與永續漁業": "食魚體驗之旅",
 }
 
 # 環保類別 → 結果頁標題底下的一句呼應文案
@@ -63,6 +64,7 @@ TAGLINES = {
     "永續城鄉與綠色生活": "老房子還在，是因為有人願意留住它",
     "動物保護與野生動物救援": "牠們本來就住在這裡，我們只是路過",
     "環境教育與公民行動": "知道之後，就很難假裝不知道了",
+    "食魚教育與永續漁業": "把魚吃對，也是護海的一種方式",
 }
 
 
@@ -146,7 +148,7 @@ def build():
             continue
         category = norm(row[2])
         if category not in THEME_TITLES:
-            problems.append(f"[好玩活動] {norm(row[1])} 的環保類別「{category}」不在十大類裡")
+            problems.append(f"[好玩活動] {norm(row[1])} 的環保類別「{category}」不在類別清單裡")
         activities[area].append({
             "region": norm(row[1]),
             "short": short_name(norm(row[1])),
